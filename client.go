@@ -12,16 +12,24 @@ type Client struct {
 	httpClient *http.Client
 
 	sleeperURL string
+
+	NFLPlayers AllPlayersJSON
 }
 
 // NewClient creates a new Sleeper Client.
-func NewClient() Client {
-	return Client{
+func NewClient() (Client, error) {
+	c := Client{
 		httpClient: &http.Client{
 			Timeout: time.Minute,
 		},
 		sleeperURL: sleeperBaseURL,
 	}
+	//players, err := c.GetAllPlayers()
+	/*if err != nil {
+		return c, err
+	}*/
+	//c.NFLPlayers = players
+	return c, nil
 }
 
 func (c *Client) sendRequest(path string, v interface{}) error {
@@ -62,5 +70,33 @@ func (c Client) GetTrendingPlayers(trendType TrendingPlayerType) (TrendingPlayer
 func (c Client) GetNflStatus() (SportStatusJSON, error) {
 	res := SportStatusJSON{}
 	err := c.sendRequest("/state/nfl", &res)
+	return res, err
+}
+
+// GetLeagueInfo returns info about the provided league.
+func (c Client) GetLeagueInfo(leagueID string) (LeagueInfoJSON, error) {
+	res := LeagueInfoJSON{}
+	err := c.sendRequest(fmt.Sprintf("/league/%s", leagueID), &res)
+	return res, err
+}
+
+// GetLeagueRosters returns the rosters currently active in the provided league.
+func (c Client) GetLeagueRosters(leagueID string) (RostersJSON, error) {
+	res := RostersJSON{}
+	err := c.sendRequest(fmt.Sprintf("/league/%s/rosters", leagueID), &res)
+	return res, err
+}
+
+// GetLeagueUsers returns the users currently active in the provided league.
+func (c Client) GetLeagueUsers(leagueID string) (UsersJSON, error) {
+	res := UsersJSON{}
+	err := c.sendRequest(fmt.Sprintf("/league/%s/users", leagueID), &res)
+	return res, err
+}
+
+// GetLeagueMatchups returns the matchups for the provided league and week.
+func (c Client) GetLeagueMatchups(leagueID string, week int) (MatchupsJSON, error) {
+	res := MatchupsJSON{}
+	err := c.sendRequest(fmt.Sprintf("/league/%s/matchups/%d", leagueID, week), &res)
 	return res, err
 }
