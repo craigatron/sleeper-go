@@ -19,6 +19,7 @@ type Client struct {
 	NFLPlayers AllPlayersJSON
 }
 
+// NewClient creates a new Sleeper Client with no GraphQL token.
 func NewClient() (Client, error) {
 	return NewClientWithToken("")
 }

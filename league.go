@@ -80,6 +80,7 @@ func NewLeague(leagueID string, token string) (League, error) {
 	return l, nil
 }
 
+// MatchupProjection is the projected score for a particular matchup.
 type MatchupProjection struct {
 	Matchup    *MatchupJSON
 	Projection float64
@@ -119,7 +120,7 @@ func (l League) GetProjections() ([]MatchupProjection, error) {
 		projectedStatsByPlayer[ps.PlayerID] = ps
 	}
 
-	gamesById, err := l.getGamesById(currentWeek)
+	gamesByID, err := l.getGamesByID(currentWeek)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +130,7 @@ func (l League) GetProjections() ([]MatchupProjection, error) {
 		projection := 0.0
 		for _, startingPlayer := range matchup.Starters {
 			if projectedStats, ok := projectedStatsByPlayer[startingPlayer]; ok {
-				gameInfo := gamesById[projectedStats.GameID]
+				gameInfo := gamesByID[projectedStats.GameID]
 				projection += l.calculatePlayerProjection(actualStatsByPlayer[startingPlayer], projectedStats, gameInfo)
 			}
 		}
@@ -147,12 +148,12 @@ type gameMetadata struct {
 	secondsLeft int
 }
 
-func (l League) getGamesById(week int) (map[string]gameMetadata, error) {
+func (l League) getGamesByID(week int) (map[string]gameMetadata, error) {
 	batchScores, err := l.Client.GetBatchScores(week, l.Season)
 	if err != nil {
 		return nil, err
 	}
-	gamesById := make(map[string]gameMetadata)
+	gamesByID := make(map[string]gameMetadata)
 
 	for _, game := range batchScores.Data.Scores {
 		var secondsLeft int
@@ -178,16 +179,16 @@ func (l League) getGamesById(week int) (map[string]gameMetadata, error) {
 			}
 			secondsLeft = (quartersLeft * 15 * 60) + (quarterMinsRemaining * 60) + quarterSecsRemaining
 		}
-		gamesById[game.GameID] = gameMetadata{
+		gamesByID[game.GameID] = gameMetadata{
 			status:      game.Status,
 			secondsLeft: secondsLeft,
 		}
 	}
-	return gamesById, nil
+	return gamesByID, nil
 }
 
-func (league League) calculatePlayerProjection(actualStats StatsJSON, projectedStats StatsJSON, gameInfo gameMetadata) float64 {
-	originalProjection := league.scoreStats(projectedStats.Stats)
+func (l League) calculatePlayerProjection(actualStats StatsJSON, projectedStats StatsJSON, gameInfo gameMetadata) float64 {
+	originalProjection := l.scoreStats(projectedStats.Stats)
 	if gameInfo.status == "pre_game" {
 		return originalProjection
 	}
@@ -195,7 +196,7 @@ func (league League) calculatePlayerProjection(actualStats StatsJSON, projectedS
 	if actualStats.Stats == nil {
 		currentScore = 0.0
 	} else {
-		currentScore = league.scoreStats(actualStats.Stats)
+		currentScore = l.scoreStats(actualStats.Stats)
 	}
 	if gameInfo.status == "complete" {
 		return currentScore
@@ -211,9 +212,9 @@ func (league League) calculatePlayerProjection(actualStats StatsJSON, projectedS
 	// TODO: think this is only the chunk that works for IDP, DEF roles had something else
 	s := currentScore + (currentScore / math.Max(minutesPlayed, 1.0) * minutesRemaining * (minutesRemaining / 60.0))
 	c := 0.2 * fractionalGameLeft * s
-	l := (.35 + .65*(1-fractionalGameLeft)) * s
+	i := (.35 + .65*(1-fractionalGameLeft)) * s
 	u := .45 * fractionalGameLeft * s
-	d := math.Max(c+l+u, currentScore)
+	d := math.Max(c+i+u, currentScore)
 	f := math.Max(originalProjection, currentScore)
 	return f + (1-fractionalGameLeft)*(d-f)
 }
