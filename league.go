@@ -1,11 +1,19 @@
 package sleeper
 
+import (
+	"math"
+	"strconv"
+	"strings"
+)
+
 // League is a Sleeper league.
 type League struct {
 	Client Client
 
 	ID    string
 	Token string
+
+	Season string
 
 	LeagueInfo LeagueInfoJSON
 	Rosters    map[int]RosterJSON
@@ -19,12 +27,18 @@ func NewLeague(leagueID string, token string) (League, error) {
 		ID:    leagueID,
 		Token: token,
 	}
-	c, err := NewClient()
+	c, err := NewClientWithToken(token)
 	if err != nil {
 		return l, err
 	}
 
 	l.Client = c
+
+	status, err := c.GetNflStatus()
+	if err != nil {
+		return l, err
+	}
+	l.Season = status.Season
 
 	li, err := c.GetLeagueInfo(leagueID)
 	if err != nil {
@@ -64,4 +78,152 @@ func NewLeague(leagueID string, token string) (League, error) {
 	l.Matchups = matchupSlice
 
 	return l, nil
+}
+
+type MatchupProjection struct {
+	Matchup    *MatchupJSON
+	Projection float64
+}
+
+// GetProjections returns the matchup projections for the current week.
+func (l League) GetProjections() ([]MatchupProjection, error) {
+	state, err := l.Client.GetNflStatus()
+	if err != nil {
+		return nil, err
+	}
+
+	currentWeek := state.Week
+
+	matchups, err := l.Client.GetLeagueMatchups(l.ID, currentWeek)
+	if err != nil {
+		return nil, err
+	}
+
+	// build the list of every active player this week
+	allActivePlayers := make([]string, 0)
+	for _, m := range matchups {
+		allActivePlayers = append(allActivePlayers, m.Starters...)
+	}
+
+	playerStats, err := l.Client.GetPlayerStats(allActivePlayers, currentWeek, l.Season)
+	if err != nil {
+		return nil, err
+	}
+
+	projectedStatsByPlayer := make(map[string]StatsJSON)
+	actualStatsByPlayer := make(map[string]StatsJSON)
+	for _, as := range playerStats.Data.Actual {
+		actualStatsByPlayer[as.PlayerID] = as
+	}
+	for _, ps := range playerStats.Data.Projected {
+		projectedStatsByPlayer[ps.PlayerID] = ps
+	}
+
+	gamesById, err := l.getGamesById(currentWeek)
+	if err != nil {
+		return nil, err
+	}
+
+	projections := make([]MatchupProjection, 0)
+	for _, matchup := range matchups {
+		projection := 0.0
+		for _, startingPlayer := range matchup.Starters {
+			if projectedStats, ok := projectedStatsByPlayer[startingPlayer]; ok {
+				gameInfo := gamesById[projectedStats.GameID]
+				projection += l.calculatePlayerProjection(actualStatsByPlayer[startingPlayer], projectedStats, gameInfo)
+			}
+		}
+		projections = append(projections, MatchupProjection{
+			Matchup:    &matchup,
+			Projection: projection,
+		})
+	}
+
+	return projections, nil
+}
+
+type gameMetadata struct {
+	status      string
+	secondsLeft int
+}
+
+func (l League) getGamesById(week int) (map[string]gameMetadata, error) {
+	batchScores, err := l.Client.GetBatchScores(week, l.Season)
+	if err != nil {
+		return nil, err
+	}
+	gamesById := make(map[string]gameMetadata)
+
+	for _, game := range batchScores.Data.Scores {
+		var secondsLeft int
+		if game.Status == "complete" {
+			secondsLeft = 0
+		} else if game.Status == "pre_game" {
+			secondsLeft = 3600
+		} else {
+			quarter := game.Metadata.QuarterNum
+			quartersLeft := 4 - quarter
+			// OT is represented as quarter 5. also there really isn't a math.max for integers in go???
+			if quartersLeft < 0 {
+				quartersLeft = 0
+			}
+			quarterTimeRemaining := strings.Split(game.Metadata.TimeRemaining, ":")
+			quarterMinsRemaining, err := strconv.Atoi(quarterTimeRemaining[0])
+			if err != nil {
+				return nil, err
+			}
+			quarterSecsRemaining, err := strconv.Atoi(quarterTimeRemaining[1])
+			if err != nil {
+				return nil, err
+			}
+			secondsLeft = (quartersLeft * 15 * 60) + (quarterMinsRemaining * 60) + quarterSecsRemaining
+		}
+		gamesById[game.GameID] = gameMetadata{
+			status:      game.Status,
+			secondsLeft: secondsLeft,
+		}
+	}
+	return gamesById, nil
+}
+
+func (league League) calculatePlayerProjection(actualStats StatsJSON, projectedStats StatsJSON, gameInfo gameMetadata) float64 {
+	originalProjection := league.scoreStats(projectedStats.Stats)
+	if gameInfo.status == "pre_game" {
+		return originalProjection
+	}
+	var currentScore float64
+	if actualStats.Stats == nil {
+		currentScore = 0.0
+	} else {
+		currentScore = league.scoreStats(actualStats.Stats)
+	}
+	if gameInfo.status == "complete" {
+		return currentScore
+	}
+
+	// else the game is in progress, let's calculate the projections on the fly
+	fractionalGameLeft := float64(gameInfo.secondsLeft) / 3600.0
+	minutesRemaining := float64(gameInfo.secondsLeft) / 60.0
+	// TODO: gotta see how overtime is handled
+	minutesPlayed := 60.0 - minutesRemaining
+
+	// this is all from the sleeper client
+	// TODO: think this is only the chunk that works for IDP, DEF roles had something else
+	s := currentScore + (currentScore / math.Max(minutesPlayed, 1.0) * minutesRemaining * (minutesRemaining / 60.0))
+	c := 0.2 * fractionalGameLeft * s
+	l := (.35 + .65*(1-fractionalGameLeft)) * s
+	u := .45 * fractionalGameLeft * s
+	d := math.Max(c+l+u, currentScore)
+	f := math.Max(originalProjection, currentScore)
+	return f + (1-fractionalGameLeft)*(d-f)
+}
+
+func (l League) scoreStats(stats map[string]float64) float64 {
+	total := 0.0
+	for statKey, statValue := range stats {
+		if statMultiplier, ok := l.LeagueInfo.ScoringSettings[statKey]; ok {
+			total += statMultiplier * statValue
+		}
+	}
+	return total
 }
