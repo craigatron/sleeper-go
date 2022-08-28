@@ -1,5 +1,7 @@
 package sleeper
 
+import "time"
+
 // AllPlayersJSON is the return type for the all players endpoint.
 type AllPlayersJSON map[string]PlayerInfoJSON
 
@@ -252,4 +254,102 @@ type MatchupJSON struct {
 	MatchupID    int      `json:"matchup_id"`
 	Points       float32  `json:"points"`
 	CustomPoints float32  `json:"custom_points"`
+}
+
+// BatchScoresJSON is the response from the batch_scores GraphQL request.
+type BatchScoresJSON struct {
+	Data struct {
+		Scores []struct {
+			Week       int    `json:"week"`
+			Status     string `json:"status"`
+			StartTime  int64  `json:"start_time"`
+			Sport      string `json:"sport"`
+			SeasonType string `json:"season_type"`
+			Season     string `json:"season"`
+			Metadata   struct {
+				AwayScoreQuarter1 int    `json:"away_score_quarter1"`
+				GeoLat            string `json:"geo_lat"`
+				HomeScoreOvertime int    `json:"home_score_overtime"`
+				TimeRemaining     string `json:"time_remaining"`
+				HomeScoreQuarter1 int    `json:"home_score_quarter1"`
+				QuarterNum        int    `json:"quarter_num"`
+				HomeScore         int    `json:"home_score"`
+				DownAndDistance   string `json:"down_and_distance"`
+				IsInProgress      bool   `json:"is_in_progress"`
+				ForecastWindSpeed int    `json:"forecast_wind_speed"`
+				SportradarGameID  string `json:"sportradar_game_id"`
+				ForecastTempLow   int    `json:"forecast_temp_low"`
+				ForecastTempHigh  int    `json:"forecast_temp_high"`
+				StadiumDetails    struct {
+					Zip            string `json:"zip"`
+					Type           string `json:"type"`
+					State          string `json:"state"`
+					PlayingSurface string `json:"playing_surface"`
+					Name           string `json:"name"`
+					Country        string `json:"country"`
+					City           string `json:"city"`
+					Capacity       int    `json:"capacity"`
+				} `json:"stadium_details"`
+				DateTime             time.Time `json:"date_time"`
+				IsOvertime           bool      `json:"is_overtime"`
+				GameKey              string    `json:"game_key"`
+				AwayTeam             string    `json:"away_team"`
+				Has3RdQuarterStarted bool      `json:"has3rd_quarter_started"`
+				ForecastDescription  string    `json:"forecast_description"`
+				Channel              string    `json:"channel"`
+				SeasonType           int       `json:"season_type"`
+				HasStarted           bool      `json:"has_started"`
+				SwishGameID          int       `json:"swish_game_id"`
+				HomeRecord           string    `json:"home_record"`
+				IsOver               bool      `json:"is_over"`
+				Status               string    `json:"status"`
+				RedZone              string    `json:"red_zone"`
+				HomeTeam             string    `json:"home_team"`
+				GeoLong              string    `json:"geo_long"`
+				Has1StQuarterStarted bool      `json:"has1st_quarter_started"`
+				AwayRecord           string    `json:"away_record"`
+				HomeScoreQuarter4    int       `json:"home_score_quarter4"`
+				Season               int       `json:"season"`
+				Has2NdQuarterStarted bool      `json:"has2nd_quarter_started"`
+				YardLineTerritory    string    `json:"yard_line_territory"`
+				Canceled             bool      `json:"canceled"`
+				HomeScoreQuarter2    int       `json:"home_score_quarter2"`
+				YardLine             string    `json:"yard_line"`
+				Down                 string    `json:"down"`
+				Has4ThQuarterStarted bool      `json:"has4th_quarter_started"`
+				AwayScoreOvertime    int       `json:"away_score_overtime"`
+				Possession           string    `json:"possession"`
+				AwayScoreQuarter3    int       `json:"away_score_quarter3"`
+				Week                 int       `json:"week"`
+				Day                  string    `json:"day"`
+				AwayScoreQuarter2    int       `json:"away_score_quarter2"`
+				HomeScoreQuarter3    int       `json:"home_score_quarter3"`
+				AwayScoreQuarter4    int       `json:"away_score_quarter4"`
+				Quarter              string    `json:"quarter"`
+				AwayScore            int       `json:"away_score"`
+				Closed               bool      `json:"closed"`
+			} `json:"metadata"`
+			GameID string `json:"game_id"`
+			Date   string `json:"date"`
+		} `json:"scores"`
+	} `json:"data"`
+}
+
+// StatsJSON is either projected or actual stats for a particular player.
+type StatsJSON struct {
+	Week     int                `json:"week"`
+	Team     string             `json:"team"`
+	Stats    map[string]float64 `json:"stats"`
+	Season   string             `json:"season"`
+	PlayerID string             `json:"player_id"`
+	Opponent string             `json:"opponent"`
+	GameID   string             `json:"game_id"`
+}
+
+// PlayerStatsJSON is the response of the projected scores endpoint.
+type PlayerStatsJSON struct {
+	Data struct {
+		Projected []StatsJSON `json:"projected"`
+		Actual    []StatsJSON `json:"actual"`
+	} `json:"data"`
 }

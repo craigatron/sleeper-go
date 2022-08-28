@@ -1,7 +1,9 @@
 package sleeper
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -11,24 +13,31 @@ import (
 type Client struct {
 	httpClient *http.Client
 
-	sleeperURL string
+	sleeperURL   string
+	graphqlToken string
 
 	NFLPlayers AllPlayersJSON
 }
 
-// NewClient creates a new Sleeper Client.
+// NewClient creates a new Sleeper Client with no GraphQL token.
 func NewClient() (Client, error) {
+	return NewClientWithToken("")
+}
+
+// NewClientWithToken creates a new Sleeper Client with a GraphQL token.
+func NewClientWithToken(graphqlToken string) (Client, error) {
 	c := Client{
 		httpClient: &http.Client{
 			Timeout: time.Minute,
 		},
-		sleeperURL: sleeperBaseURL,
+		sleeperURL:   sleeperBaseURL,
+		graphqlToken: graphqlToken,
 	}
-	//players, err := c.GetAllPlayers()
-	/*if err != nil {
+	players, err := c.GetAllPlayers()
+	if err != nil {
 		return c, err
-	}*/
-	//c.NFLPlayers = players
+	}
+	c.NFLPlayers = players
 	return c, nil
 }
 
@@ -43,6 +52,34 @@ func (c *Client) sendRequest(path string, v interface{}) error {
 		return err
 	}
 
+	defer res.Body.Close()
+
+	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusBadRequest {
+		return fmt.Errorf("unknown error, status code: %d", res.StatusCode)
+	}
+
+	return json.NewDecoder(res.Body).Decode(&v)
+}
+
+func (c *Client) sendGraphqlRequest(op interface{}, v interface{}) error {
+	if c.graphqlToken == "" {
+		return errors.New("cannot send GraphQL requests without a Sleeper token")
+	}
+	jsonBody, err := json.Marshal(op)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest("POST", sleeperGraphqlURL, bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("authorization", c.graphqlToken)
+
+	res, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
 	defer res.Body.Close()
 
 	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusBadRequest {
@@ -98,5 +135,33 @@ func (c Client) GetLeagueUsers(leagueID string) (UsersJSON, error) {
 func (c Client) GetLeagueMatchups(leagueID string, week int) (MatchupsJSON, error) {
 	res := MatchupsJSON{}
 	err := c.sendRequest(fmt.Sprintf("/league/%s/matchups/%d", leagueID, week), &res)
+	return res, err
+}
+
+// GetBatchScores returns scores and game info for the given week's games.
+func (c Client) GetBatchScores(week int, season string) (BatchScoresJSON, error) {
+	res := BatchScoresJSON{}
+	op := map[string]interface{}{
+		"operationName": "batch_scores",
+		"variables":     struct{}{},
+		"query":         fmt.Sprintf("query batch_scores {scores: scores(sport: \"nfl\",season_type: \"regular\",season: \"%s\",week: %d){date game_id metadata season season_type sport status week start_time}}", season, week),
+	}
+	err := c.sendGraphqlRequest(op, &res)
+	return res, err
+}
+
+// GetPlayerStats returns actual and projected stats for the given set of players.
+func (c Client) GetPlayerStats(playerIds []string, week int, season string) (PlayerStatsJSON, error) {
+	res := PlayerStatsJSON{}
+	playersStr, err := json.Marshal(playerIds)
+	if err != nil {
+		return res, err
+	}
+	op := map[string]interface{}{
+		"operationName": "get_player_score_and_projections_batch",
+		"variables":     struct{}{},
+		"query":         fmt.Sprintf("query get_player_score_and_projections_batch { actual: stats_for_players_in_week(sport: \"nfl\",season: \"%s\",category: \"stat\",season_type: \"regular\",week: %d,player_ids: %s){ game_id opponent player_id stats team week season } projected: stats_for_players_in_week(sport: \"nfl\",season: \"%s\",category: \"proj\",season_type: \"regular\",week: %d,player_ids: %s){ game_id opponent player_id stats team week season } }", season, week, playersStr, season, week, playersStr),
+	}
+	err = c.sendGraphqlRequest(op, &res)
 	return res, err
 }
