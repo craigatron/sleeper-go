@@ -1,6 +1,7 @@
 package sleeper
 
 import (
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -82,7 +83,7 @@ func NewLeague(leagueID string, token string) (League, error) {
 
 // MatchupProjection is the projected score for a particular matchup.
 type MatchupProjection struct {
-	Matchup    *MatchupJSON
+	Matchup    MatchupJSON
 	Projection float64
 }
 
@@ -135,7 +136,7 @@ func (l League) GetProjections() ([]MatchupProjection, error) {
 			}
 		}
 		projections = append(projections, MatchupProjection{
-			Matchup:    &matchup,
+			Matchup:    matchup,
 			Projection: projection,
 		})
 	}
@@ -162,8 +163,22 @@ func (l League) getGamesByID(week int) (map[string]gameMetadata, error) {
 		} else if game.Status == "pre_game" {
 			secondsLeft = 3600
 		} else {
+			// the quarter_num value is either an empty string or a number??? wtf sleeper
 			quarter := game.Metadata.QuarterNum
-			quartersLeft := 4 - quarter
+			var quarterNum int
+			switch quarter := quarter.(type) {
+			case int:
+				quarterNum = quarter
+			case string:
+				val, err := strconv.Atoi(quarter)
+				if err != nil {
+					return nil, err
+				}
+				quarterNum = val
+			default:
+				return nil, fmt.Errorf("unexpected quarter_num value: %s", quarter)
+			}
+			quartersLeft := 4 - quarterNum
 			// OT is represented as quarter 5. also there really isn't a math.max for integers in go???
 			if quartersLeft < 0 {
 				quartersLeft = 0
