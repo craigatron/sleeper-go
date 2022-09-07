@@ -267,19 +267,19 @@ type BatchScoresJSON struct {
 			SeasonType string `json:"season_type"`
 			Season     string `json:"season"`
 			Metadata   struct {
-				AwayScoreQuarter1 int    `json:"away_score_quarter1"`
-				GeoLat            string `json:"geo_lat"`
-				HomeScoreOvertime int    `json:"home_score_overtime"`
-				TimeRemaining     string `json:"time_remaining"`
-				HomeScoreQuarter1 int    `json:"home_score_quarter1"`
-				QuarterNum        int    `json:"quarter_num"`
-				HomeScore         int    `json:"home_score"`
-				DownAndDistance   string `json:"down_and_distance"`
-				IsInProgress      bool   `json:"is_in_progress"`
-				ForecastWindSpeed int    `json:"forecast_wind_speed"`
-				SportradarGameID  string `json:"sportradar_game_id"`
-				ForecastTempLow   int    `json:"forecast_temp_low"`
-				ForecastTempHigh  int    `json:"forecast_temp_high"`
+				AwayScoreQuarter1 int         `json:"away_score_quarter1"`
+				GeoLat            string      `json:"geo_lat"`
+				HomeScoreOvertime int         `json:"home_score_overtime"`
+				TimeRemaining     string      `json:"time_remaining"`
+				HomeScoreQuarter1 int         `json:"home_score_quarter1"`
+				QuarterNum        interface{} `json:"quarter_num"` // can be either a number or a string, annoyingly
+				HomeScore         int         `json:"home_score"`
+				DownAndDistance   string      `json:"down_and_distance"`
+				IsInProgress      bool        `json:"is_in_progress"`
+				ForecastWindSpeed int         `json:"forecast_wind_speed"`
+				SportradarGameID  string      `json:"sportradar_game_id"`
+				ForecastTempLow   int         `json:"forecast_temp_low"`
+				ForecastTempHigh  int         `json:"forecast_temp_high"`
 				StadiumDetails    struct {
 					Zip            string `json:"zip"`
 					Type           string `json:"type"`
